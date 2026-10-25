@@ -1,0 +1,39 @@
+---
+- name: Настройка веб-серверов
+  hosts: web
+  become: true
+  roles:
+    - nginx_web
+
+- name: Установка Elasticsearch
+  hosts: elasticsearch
+  become: true
+  roles:
+    - elasticsearch
+
+- name: Установка Filebeat на веб-серверы
+  hosts: web
+  become: true
+  roles:
+    - filebeat
+
+- name: Установка Kibana
+  hosts: kibana
+  become: true
+  roles:
+    - kibana
+
+- name: Установка Zabbix Server
+  hosts: zabbix_server
+  become: true
+  vars:
+    zabbix_db_password: "Password@2026"
+    zabbix_repo_url: "https://repo.zabbix.com/zabbix/7.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_7.0+ubuntu22.04_all.deb"
+  roles:
+    - zabbix_server
+
+- name: Установка Zabbix Agent на все ВМ кроме zabbix server
+  hosts: all:!zabbix_server
+  become: true
+  roles:
+    - zabbix_agent

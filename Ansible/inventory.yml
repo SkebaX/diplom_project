@@ -1,0 +1,40 @@
+all:
+  children:
+    bastion:
+      hosts:
+        bastion.ru-central1.internal:
+
+    web:
+      hosts:
+        web1.ru-central1.internal:
+        web2.ru-central1.internal:
+
+    zabbix_server:
+      hosts:
+        zabbix.ru-central1.internal:
+
+    elasticsearch:
+      hosts:
+        elasticsearch.ru-central1.internal:
+
+    kibana:
+      hosts:
+        kibana.ru-central1.internal:
+
+    zabbix_agents:
+      children:
+        web:
+        zabbix_server:
+        elasticsearch:
+        kibana:
+      vars:
+        zabbix_server_ip: "zabbix.ru-central1.internal"
+
+  vars:
+    ansible_user: ubuntu
+    ansible_ssh_private_key_file: /home/ubuntu/.ssh/diplom_key
+    es_version: "8.15.0"
+    kibana_version: "8.15.0"
+    filebeat_version: "8.19.23"
+    elasticsearch_host: "elasticsearch.ru-central1.internal"
+    kibana_host: "kibana.ru-central1.internal"
