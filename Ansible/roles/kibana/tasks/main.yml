@@ -1,0 +1,73 @@
+---
+- name: Отключить unattended-upgrades
+  service:
+    name: unattended-upgrades
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Убить процессы, держащие apt-локи
+  shell: |
+    for lock in /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock; do
+      pid=$(sudo fuser "$lock" 2>/dev/null)
+      if [ -n "$pid" ]; then
+        sudo kill "$pid" 2>/dev/null || true
+        sleep 2
+        sudo kill -9 "$pid" 2>/dev/null || true
+      fi
+    done
+  changed_when: false
+
+- name: Ждать освобождения всех apt-локов
+  shell: |
+    while true; do
+      busy=false
+      for lock in /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock; do
+        if sudo fuser "$lock" >/dev/null 2>&1; then
+          busy=true
+        fi
+      done
+      if [ "$busy" = false ]; then
+        break
+      fi
+      sleep 2
+    done
+  changed_when: false
+
+- name: Заставить apt использовать только IPv4
+  copy:
+    dest: /etc/apt/apt.conf.d/99force-ipv4
+    content: "Acquire::ForceIPv4 \"true\";\n"
+
+- name: Скачивание Kibana
+  get_url:
+    url: "https://mirror.yandex.ru/mirrors/elastic/8/pool/main/k/kibana/kibana-{{ kibana_version }}-amd64.deb"
+    dest: /tmp/kibana.deb
+    mode: "0644"
+
+- name: Установка Kibana
+  apt:
+    deb: /tmp/kibana.deb
+  retries: 3
+  delay: 15
+  register: kibana_install
+  until: kibana_install is success
+
+- name: Настроить kibana.yml
+  copy:
+    dest: /etc/kibana/kibana.yml
+    content: |
+      server.host: "0.0.0.0"
+      server.port: 5601
+      elasticsearch.hosts: ["http://{{ elasticsearch_host }}:9200"]
+      elasticsearch.ssl.verificationMode: none
+    owner: root
+    group: kibana
+    mode: "0660"
+  notify: restart kibana
+
+- name: Запустить и включить Kibana
+  service:
+    name: kibana
+    state: started
+    enabled: true

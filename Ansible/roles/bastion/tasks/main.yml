@@ -1,0 +1,24 @@
+---
+- name: Установить зависимости на бастион
+  apt:
+    name:
+      - sshpass
+      - python3-pip
+      - python3-pymysql
+      - python3-docker
+    state: present
+    update_cache: true
+
+- name: Отключить password authentication в SSH
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PasswordAuthentication'
+    line: 'PasswordAuthentication no'
+  notify: restart sshd
+
+- name: Разрешить port forwarding в SSH
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?AllowTcpForwarding'
+    line: 'AllowTcpForwarding yes'
+  notify: restart sshd

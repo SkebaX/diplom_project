@@ -1,0 +1,29 @@
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+
+    root /var/www/html;
+    index index.html;
+
+    server_name _;
+
+    location = /hostname {
+        default_type text/plain;
+        return 200 "$hostname\n";
+    }
+
+    location = /stub_status {
+        stub_status;
+        allow 127.0.0.1;
+        allow ::1;
+        allow 10.0.0.0/16;
+        deny all;
+    }
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    access_log /var/log/nginx/access.log;
+    error_log /var/log/nginx/error.log;
+}

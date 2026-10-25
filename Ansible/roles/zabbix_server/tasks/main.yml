@@ -1,0 +1,112 @@
+---
+- name: Обновление списка пакетов
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Установка базовых зависимостей
+  apt:
+    name:
+      - wget
+      - nginx
+      - mariadb-server
+      - python3-pymysql
+      - php-fpm
+      - php-cli
+      - php-mysql
+      - php-mbstring
+      - php-gd
+      - php-xml
+      - php-bcmath
+    state: present
+
+- name: Скачивание репозитория Zabbix 7.0 LTS
+  shell: wget --inet4-only -q -O /tmp/zabbix-release.deb "{{ zabbix_repo_url }}"
+  args:
+    creates: /tmp/zabbix-release.deb
+
+- name: Установка репозитория Zabbix
+  apt:
+    deb: /tmp/zabbix-release.deb
+    force: yes
+
+- name: Обновление списка пакетов после добавления репозитория
+  apt:
+    update_cache: yes
+
+- name: Установка компонентов Zabbix (Server, Frontend, Agent2)
+  apt:
+    name:
+      - zabbix-server-mysql
+      - zabbix-frontend-php
+      - zabbix-nginx-conf
+      - zabbix-agent2
+      - zabbix-sql-scripts
+    state: present
+
+- name: Удалить дефолтный сайт Nginx
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+
+- name: Запуск и включение MariaDB
+  service:
+    name: mariadb
+    state: started
+    enabled: true
+
+- name: Создание базы данных Zabbix
+  mysql_db:
+    name: zabbix
+    encoding: utf8mb4
+    collation: utf8mb4_bin
+    state: present
+    login_unix_socket: /run/mysqld/mysqld.sock
+
+- name: Создание пользователя Zabbix
+  mysql_user:
+    name: zabbix
+    password: "{{ zabbix_db_password }}"
+    priv: "zabbix.*:ALL"
+    state: present
+    login_unix_socket: /run/mysqld/mysqld.sock
+
+- name: Включение log_bin_trust_function_creators
+  mysql_variables:
+    variable: log_bin_trust_function_creators
+    value: 1
+    login_unix_socket: /run/mysqld/mysqld.sock
+
+- name: Проверка наличия таблиц в базе Zabbix
+  shell: mysql -uzabbix -p"{{ zabbix_db_password }}" zabbix -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='zabbix';" -s -N
+  register: zabbix_tables_count
+  changed_when: false
+
+- name: Импорт схемы Zabbix
+  shell: zcat /usr/share/zabbix-sql-scripts/mysql/server.sql.gz | mysql -uzabbix -p"{{ zabbix_db_password }}" zabbix
+  when: zabbix_tables_count.stdout | int == 0
+
+- name: Настройка DBPassword в zabbix_server.conf
+  lineinfile:
+    path: /etc/zabbix/zabbix_server.conf
+    regexp: '^DBPassword='
+    line: 'DBPassword={{ zabbix_db_password }}'
+    create: yes
+
+- name: Перезапуск Zabbix Server
+  service:
+    name: zabbix-server
+    state: restarted
+    enabled: true
+
+- name: Перезапуск Nginx
+  service:
+    name: nginx
+    state: restarted
+    enabled: true
+
+- name: Перезапуск Zabbix Agent2
+  service:
+    name: zabbix-agent2
+    state: restarted
+    enabled: true

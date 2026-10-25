@@ -1,0 +1,130 @@
+---
+- name: Отключить unattended-upgrades
+  service:
+    name: unattended-upgrades
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Убить процессы, держащие apt-локи
+  shell: |
+    for lock in /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock; do
+      pid=$(sudo fuser "$lock" 2>/dev/null)
+      if [ -n "$pid" ]; then
+        sudo kill "$pid" 2>/dev/null || true
+        sleep 2
+        sudo kill -9 "$pid" 2>/dev/null || true
+      fi
+    done
+  changed_when: false
+
+- name: Ждать освобождения всех apt-локов
+  shell: |
+    while true; do
+      busy=false
+      for lock in /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock; do
+        if sudo fuser "$lock" >/dev/null 2>&1; then
+          busy=true
+        fi
+      done
+      if [ "$busy" = false ]; then
+        break
+      fi
+      sleep 2
+    done
+  changed_when: false
+
+- name: Заставить apt использовать только IPv4
+  copy:
+    dest: /etc/apt/apt.conf.d/99force-ipv4
+    content: "Acquire::ForceIPv4 \"true\";\n"
+
+- name: Установить OpenJDK
+  apt:
+    name: openjdk-17-jre-headless
+    state: present
+    update_cache: true
+  retries: 3
+  delay: 15
+  register: jdk_install
+  until: jdk_install is success
+
+- name: Скачивание Elasticsearch
+  get_url:
+    url: "https://mirror.yandex.ru/mirrors/elastic/8/pool/main/e/elasticsearch/elasticsearch-{{ es_version }}-amd64.deb"
+    dest: /tmp/elasticsearch.deb
+    mode: "0644"
+
+- name: Установка Elasticsearch
+  apt:
+    deb: /tmp/elasticsearch.deb
+  retries: 3
+  delay: 15
+  register: es_install
+  until: es_install is success
+
+- name: Настроить vm.max_map_count
+  sysctl:
+    name: vm.max_map_count
+    value: "262144"
+    state: present
+    reload: true
+
+- name: Настроить права на директории Elasticsearch
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: elasticsearch
+    group: elasticsearch
+    mode: "0755"
+  loop:
+    - /var/log/elasticsearch
+    - /usr/share/elasticsearch/logs
+    - /usr/share/elasticsearch/data
+
+- name: Удалить авто-сгенерированный keystore
+  file:
+    path: /etc/elasticsearch/elasticsearch.keystore
+    state: absent
+
+- name: Создать пустой keystore
+  shell: |
+    ES_PATH_CONF=/etc/elasticsearch /usr/share/elasticsearch/bin/elasticsearch-keystore create < /dev/null 2>&1
+    chown root:elasticsearch /etc/elasticsearch/elasticsearch.keystore
+    chmod 0660 /etc/elasticsearch/elasticsearch.keystore
+  args:
+    creates: /etc/elasticsearch/elasticsearch.keystore
+
+- name: Настроить elasticsearch.yml
+  copy:
+    dest: /etc/elasticsearch/elasticsearch.yml
+    content: |
+      cluster.name: single-node-cluster
+      network.host: 0.0.0.0
+      discovery.type: single-node
+      xpack.security.enabled: false
+      xpack.security.enrollment.enabled: false
+      xpack.ml.enabled: false
+    owner: root
+    group: elasticsearch
+    mode: "0660"
+  notify: restart elasticsearch
+
+- name: Настроить JVM heap
+  lineinfile:
+    path: /etc/elasticsearch/jvm.options.d/heap.options
+    line: "{{ item }}"
+    create: true
+    owner: root
+    group: elasticsearch
+    mode: "0660"
+  loop:
+    - "-Xms1g"
+    - "-Xmx1g"
+  notify: restart elasticsearch
+
+- name: Запустить и включить Elasticsearch
+  service:
+    name: elasticsearch
+    state: started
+    enabled: true

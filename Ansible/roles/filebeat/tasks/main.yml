@@ -1,0 +1,30 @@
+---
+- name: Установить wget
+  apt:
+    name: wget
+    state: present
+
+- name: Скачивание Filebeat
+  get_url:
+    url: "https://mirror.yandex.ru/mirrors/elastic/8/pool/main/f/filebeat/filebeat-{{ filebeat_version }}-amd64.deb"
+    dest: /tmp/filebeat.deb
+    mode: "0644"
+
+- name: Установка Filebeat
+  apt:
+    deb: /tmp/filebeat.deb
+
+- name: Настройка конфигурации Filebeat
+  template:
+    src: filebeat.yml.j2
+    dest: /etc/filebeat/filebeat.yml
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart filebeat
+
+- name: Запуск и включение Filebeat
+  service:
+    name: filebeat
+    state: started
+    enabled: true

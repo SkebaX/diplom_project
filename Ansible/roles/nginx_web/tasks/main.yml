@@ -1,0 +1,82 @@
+---
+- name: Отключить unattended-upgrades
+  service:
+    name: unattended-upgrades
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Убить процессы, держащие apt-локи
+  shell: |
+    for lock in /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock; do
+      pid=$(sudo fuser "$lock" 2>/dev/null)
+      if [ -n "$pid" ]; then
+        sudo kill "$pid" 2>/dev/null || true
+        sleep 2
+        sudo kill -9 "$pid" 2>/dev/null || true
+      fi
+    done
+  changed_when: false
+
+- name: Ждать освобождения всех apt-локов
+  shell: |
+    while true; do
+      busy=false
+      for lock in /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock; do
+        if sudo fuser "$lock" >/dev/null 2>&1; then
+          busy=true
+        fi
+      done
+      if [ "$busy" = false ]; then
+        break
+      fi
+      sleep 2
+    done
+  changed_when: false
+
+- name: Заставить apt использовать только IPv4
+  copy:
+    dest: /etc/apt/apt.conf.d/99force-ipv4
+    content: "Acquire::ForceIPv4 \"true\";\n"
+
+- name: Установить Nginx
+  apt:
+    name: nginx
+    state: present
+    update_cache: true
+  retries: 3
+  delay: 15
+  register: nginx_install
+  until: nginx_install is success
+
+- name: Создать директорию для сайта
+  file:
+    path: /var/www/html
+    state: directory
+    mode: '0755'
+
+- name: Разместить index.html
+  copy:
+    src: index.html
+    dest: /var/www/html/index.html
+    mode: '0644'
+  notify: restart nginx
+
+- name: Настроить конфиг Nginx
+  template:
+    src: default.j2
+    dest: /etc/nginx/sites-available/default
+    mode: '0644'
+  notify: restart nginx
+
+- name: Включить сайт
+  file:
+    src: /etc/nginx/sites-available/default
+    dest: /etc/nginx/sites-enabled/default
+    state: link
+
+- name: Убедиться что Nginx запущен
+  service:
+    name: nginx
+    state: started
+    enabled: true
