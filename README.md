@@ -8,6 +8,7 @@
 
 ![yandex cloud console](https://github.com/SkebaX/diplom_project/blob/5f2c727a58d9957bd1b736960ca4ed3169cb015c/Screeshots/Yandex%20Cloud%20Console.png)
 ![vms](https://github.com/SkebaX/diplom_project/blob/5f2c727a58d9957bd1b736960ca4ed3169cb015c/Screeshots/vms.png)
+![Snapshot](https://github.com/SkebaX/diplom_project/blob/e9478184d4b70384be90c5ccc2c3e01e6a585d96/Screeshots/Snapshot.JPG)
 ![Network](https://github.com/SkebaX/diplom_project/blob/5f2c727a58d9957bd1b736960ca4ed3169cb015c/Screeshots/network.png)
 ![Network1](https://github.com/SkebaX/diplom_project/blob/5f2c727a58d9957bd1b736960ca4ed3169cb015c/Screeshots/network-1.png)
 ![Pubic IP](https://github.com/SkebaX/diplom_project/blob/5f2c727a58d9957bd1b736960ca4ed3169cb015c/Screeshots/public%20IP.png)
